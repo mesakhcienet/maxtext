@@ -32,7 +32,7 @@ from flax import nnx
 from MaxText import max_logging
 from MaxText.common_types import Config, DType, AxisNames, BATCH, LENGTH, EMBED, HEAD, D_KV, Array, MODEL_MODE_TRAIN
 from MaxText.layers import initializers
-from MaxText.layers import linears
+from MaxText.layers.linears import mlp_block
 from MaxText.layers import models
 from MaxText.layers import quantizations
 from MaxText.layers.attentions import KVQuant, attention_op_as_linen, dense_general
@@ -384,7 +384,8 @@ class Gpt3DecoderLayer(nn.Module):
     attention_lnx += inputs
 
     # MLP block.
-    mlp_lnx = linears.MlpBlock(
+    mlp_lnx = mlp_block(
+        in_features=attention_lnx.shape[-1],
         intermediate_dim=cfg.mlp_dim,
         activations=cfg.mlp_activations,
         intermediate_dropout_rate=cfg.dropout_rate,
