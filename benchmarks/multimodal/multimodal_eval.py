@@ -67,16 +67,27 @@ from MaxText import multimodal_utils
 
 ASCII_UPPERCASE_A = ord("A")  # ASCII value for uppercase 'A'
 
-DEFAULT_PROMPT_TEMPLATE = """{image_placeholder}{question}
-{choices}
-Give me answer directly in the format <answer>your_answer</answer>."""
+# DEFAULT_PROMPT_TEMPLATE = """{image_placeholder}{question}
+# {choices}
+# Give me answer directly in the format <answer>your_answer</answer>."""
+
+DEFAULT_PROMPT_TEMPLATE = """You are an expert at answering questions based 
+on provided charts. Your task is to extract the exact answer from the 
+given context or determine that it's not present.
+{image_placeholder} Question: {question}
+For numerical answers, provide only the number. 
+For text answers, provide only the exact text. 
+For judgement questions, respond with "Yes" or "No".
+If not found, output "N/A". 
+Your output must be only the exact answer within <answer></answer>, with no extra contents.
+"""
 
 
-_PROMPT_TEMPLATE = flags.DEFINE_string(
-    "prompt_template",
-    default=DEFAULT_PROMPT_TEMPLATE,
-    help="prompt template",
-)
+# _PROMPT_TEMPLATE = flags.DEFINE_string(
+#     "prompt_template",
+#     default=DEFAULT_PROMPT_TEMPLATE,
+#     help="prompt template",
+# )
 
 @dataclass
 class ParsedDatasetExample:
@@ -99,17 +110,18 @@ def parse_dataset_example(example, hf_dataset_name):
   return parsed_example
 
 
-def construct_prompt(parsed_dataset_example: ParsedDatasetExample, config):
+def construct_prompt(parsed_dataset_example: ParsedDatasetExample, config, system_message: Optional[str] = None):
   """Construct prompt from a parsed dataset example."""
   image_placeholder = multimodal_utils.get_image_placeholder(config.model_name) if config.use_multimodal else ""
   choices_text = "\n".join(f"{chr(ASCII_UPPERCASE_A + idx)}. {choice}" for idx, choice in enumerate(parsed_dataset_example.choices)) if parsed_dataset_example.choices else ""
   prompt = DEFAULT_PROMPT_TEMPLATE.format(
     image_placeholder=image_placeholder, 
     question=parsed_dataset_example.question, 
-    choices=choices_text
+    choices=choices_text if choices_text else "N/A"
   )
   # Add extra model-specific formatting such as user/model/assistant tags
   prompt = multimodal_utils.reformat_prompt(prompt, config.model_name)
+  prompt = system_message + "\n\n" + prompt if system_message else prompt
   return prompt
 
 
@@ -213,13 +225,16 @@ def main(config):
     # subject_total[subject] += 1
     max_logging.log(f"Running accuracy: {correct_count / (total_count):.4f} | Processed: {total_count}/{len(test_ds)}")
 
+    if idx >= 9: # For debugging, limit to first 10 examples
+      break
+
     if idx % 50 == 0:
       max_logging.log(f" Accuracy: {correct_count / total_count:.4f} | Processed: {total_count}/{len(test_ds)}")
 
   # Final accuracy
   if total_count > 0:
     accuracy = correct_count / total_count
-    max_logging.log(f"\nFinal accuracy on MMLU dataset: {accuracy:.4f}")
+    max_logging.log(f"\nFinal accuracy on MMMU dataset: {accuracy:.4f}")
   else:
     max_logging.log("No valid predictions were made.")
 
