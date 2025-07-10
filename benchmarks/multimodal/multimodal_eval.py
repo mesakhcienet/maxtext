@@ -234,7 +234,7 @@ def main(config):
   # Final accuracy
   if total_count > 0:
     accuracy = correct_count / total_count
-    max_logging.log(f"\nFinal accuracy on MMMU dataset: {accuracy:.4f}")
+    max_logging.log(f"\nFinal accuracy on ChartQA dataset: {accuracy:.4f}")
   else:
     max_logging.log("No valid predictions were made.")
 
