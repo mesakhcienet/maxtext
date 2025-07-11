@@ -49,10 +49,14 @@ from MaxText import maxengine
 from MaxText import maxtext_utils
 from MaxText import pyconfig
 from MaxText.common_types import Array
-from MaxText.experimental.rl.grpo_trainer import compute_log_probs, grpo_loss_fn, _merge_grpo_state, generate_completions
+import MaxText as mt
+from MaxText.experimental.rl.grpo_trainer import grpo_loss_fn, _merge_grpo_state
+from MaxText.experimental.rl.grpo_utils import compute_log_probs
+from MaxText.inference import offline_engine
 from MaxText.globals import PKG_DIR
 from MaxText.layers import models
 from MaxText.layers import quantizations
+from MaxText.inference.offline_engine import InputData
 
 
 def get_golden_data(config):
@@ -63,12 +67,11 @@ def get_golden_data(config):
     return next(iter(reader))
 
 
-def setup_maxtext_model(config):
+def setup_maxtext_model(config, mesh):
   """setup maxtext model"""
   init_rng = jax.random.PRNGKey(config.init_weights_seed)
   quant = quantizations.configure_quantization(config)
-  devices_array = maxtext_utils.create_device_mesh(config)
-  mesh = Mesh(devices_array, config.mesh_axes)
+  
   maxtext_model = models.Transformer(config=config, mesh=mesh, quant=quant)
   state, state_mesh_annotations = maxtext_utils.setup_decode_state(maxtext_model, config, init_rng, mesh, None)
   state_mesh_shardings = nn.logical_to_mesh_sharding(state_mesh_annotations, mesh, config.logical_axis_rules)
@@ -114,6 +117,7 @@ class GrpoTrainerTest(unittest.TestCase):
         run_name="unit_test_grpo_trainer",
         tokenizer_path=os.path.join(os.path.dirname(PKG_DIR), "assets", "llama3.1-tokenizer"),
         enable_checkpointing=False,
+        train_data_columns='prompt',
     )
     self.config_inference = pyconfig.initialize(
         [None, "MaxText/experimental/rl/grpo_trainer_test.yml"],
@@ -123,6 +127,8 @@ class GrpoTrainerTest(unittest.TestCase):
         ici_tensor_parallelism=4,
         per_device_batch_size=self.config.per_device_batch_size * self.config.num_generations,
     )
+    self.model = mt.from_pretrained(self.config)
+    self.inference_model = mt.from_pretrained(self.config_inference)
     self.rtol = 1e-05
     self.atol = 1e-08
     self.rng = jax.random.PRNGKey(self.config.init_weights_seed)
@@ -133,7 +139,13 @@ class GrpoTrainerTest(unittest.TestCase):
         legacy=False,
         padding_side="left",
     )
+    devices_array = maxtext_utils.create_device_mesh(self.config_inference)
+    self.mesh = Mesh(devices_array, self.config_inference.mesh_axes)
     self.tokenizer_model.add_special_tokens({"pad_token": "<pad>"})
+    self.inference_engine = offline_engine.OfflineEngine(
+      config = self.config_inference,
+      mesh = self.inference_model.mesh,
+    )
 
   @pytest.mark.skip(reason="Logit output test fragile, failing on jax upgrade to 0.6.2 - see b/425997645")
   @pytest.mark.tpu_only  # ATTENTION: Only run on TPU V4-8
@@ -141,27 +153,27 @@ class GrpoTrainerTest(unittest.TestCase):
     # Get the expected (golden) data.
     golden_data = get_golden_data(self.config)
     # Initialize the model and related objects.
-    maxtext_model, state, reference_params, rng, state_mesh_shardings, data_sharding = setup_maxtext_model(self.config)
+    maxtext_model, state, reference_params, rng, state_mesh_shardings, data_sharding = setup_maxtext_model(self.config, self.mesh)
     # Prepare inputs for the model.
     input_ids, input_segmentation, input_position, completion_segmentation = prepare_maxtext_inputs(
         self.config.prompt, self.tokenizer_model
     )
     # Obtain per-token logits.
     maxtext_per_token_logps, _ = compute_log_probs(
-        maxtext_model,
-        state.params,
-        input_ids,
-        input_position,
-        input_segmentation,
-        completion_segmentation,
-        self.config,
-        is_train=False,
-        rngs=self.rng,
+      maxtext_model,
+      state.params,
+      input_ids,
+      input_position,
+      input_segmentation,
+      completion_segmentation,
+      self.config,
+      is_train=False,
+      rngs=self.rng,
     )
     jax.debug.print("maxtext_per_token_logps={maxtext_per_token_logps}", maxtext_per_token_logps=maxtext_per_token_logps)
     jax.debug.print(
-        "golden_per_token_logps={golden_per_token_logps}",
-        golden_per_token_logps=golden_data["maxtext_per_token_logps_no_ckpt_loading"],
+      "golden_per_token_logps={golden_per_token_logps}",
+      golden_per_token_logps=golden_data["maxtext_per_token_logps_no_ckpt_loading"],
     )
     golden_maxtext_logits = np.array(golden_data["maxtext_per_token_logps_no_ckpt_loading"])
     self.assertTrue(jnp.all(np.array(golden_data["input_ids"]) == np.array(input_ids[0])))
@@ -203,16 +215,15 @@ class GrpoTrainerTest(unittest.TestCase):
     )
     prompt_true_length = jnp.array([len(prompt_tokens)] * 4)
     engine_data = {"prompt": prompt, "prompt_true_length": prompt_true_length}
-    p_generate_completions: Callable[[dict, dict, Array], Array] = jax.jit(
-        functools.partial(generate_completions, self.config, self.tokenizer_model, engine),
-        in_shardings=(data_sharding, state_mesh_shardings.params, None),
-        out_shardings=data_sharding,
-        donate_argnums=(0,),
-    )
-    # pylint: disable=not-callable
-    engine_data = p_generate_completions(engine_data, {"params": state.params["params"]}, rng)
+    
+    input_data = []
+    for i, d in enumerate(engine_data[self.config.train_data_columns]):
+      input_data.append(InputData(id=f"input_{i}", tokens=np.array(d), true_length=np.array(data[f"{self.config.train_data_columns}_true_length"][i])[0]))
+    
+    results = self.inference_engine.batch_inference(input_data)
+    
     # Assert that the generated completions match the golden reference.
-    self.assertEqual(engine_data["prompt_completions"][0].tolist(), golden_data["generated_completions"])
+    self.assertEqual(results["prompt_completions"][0].tolist(), golden_data["generated_completions"])
 
 
 if __name__ == "__main__":
