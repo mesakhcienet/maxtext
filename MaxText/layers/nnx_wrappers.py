@@ -541,6 +541,7 @@ def to_linen_class(nnx_class, *args, **kwargs):
               **kwargs,
               **(self.extra_kwargs or {}),
           })
+      print(f"{full_kwargs=}")
       return ToLinen(nnx_class,
                     args=args,
                     kwargs=FrozenDict({
