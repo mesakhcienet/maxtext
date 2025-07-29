@@ -33,7 +33,7 @@ from MaxText.layers.linears import MlpBlock
 from MaxText.layers import initializers
 from MaxText.layers.normalizations import rms_norm
 from MaxText.layers.quantizations import AqtQuantization as Quant
-
+from MaxText.layers import nnx_wrappers
 
 GEMMA3_ATTENTION_PATTERN = (
     attentions.AttentionType.LOCAL_SLIDING,
@@ -212,7 +212,7 @@ def gemma3_decoder_layer(
     name: Optional[str] = None,
 )-> nn.Module:
   """Creates a Gemma3DecoderLayer Linen module."""
-  return nnx.bridge.to_linen(
+  return nnx_wrappers.to_linen(
       Gemma3DecoderLayer,
       config=config,
       mesh=mesh,
@@ -220,6 +220,11 @@ def gemma3_decoder_layer(
       attention_type=attention_type,
       name=name,
       metadata_fn=initializers.variable_to_logically_partitioned,
+  )
+def gemma3_decoder_layer_class():
+  return nnx_wrappers.to_linen_class(
+    Gemma3DecoderLayer,
+    metadata_fn=initializers.variable_to_logically_partitioned,
   )
 
 

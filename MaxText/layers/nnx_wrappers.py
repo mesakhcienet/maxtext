@@ -303,7 +303,7 @@ def linen_rngs_dict(linen_module: linen.Module, add_default: bool = False):
   return rngs
 
 
-def _get_module_method(module, method: tp.Callable[..., Any] | str | None):
+def _get_module_method(module, method: tp.Callable[..., tp.Any] | str | None):
   """Get a callable method from the module, or raise TypeError."""
   if method is None:
     method = "__call__"
@@ -374,7 +374,7 @@ class ToLinen(linen.Module):
 
   @linen.compact
   def __call__(
-    self, *args, nnx_method: tp.Callable[..., Any] | str | None = None, **kwargs
+    self, *args, nnx_method: tp.Callable[..., tp.Any] | str | None = None, **kwargs
   ):
     module_kwargs = dict(self.kwargs)
     maybe_add_default = not self.is_initializing()
@@ -499,3 +499,55 @@ def to_linen(
     abstract_init=abstract_init,
     name=name,
   )
+
+
+# TODO: find better implementation
+def to_linen_class(nnx_class, *args, **kwargs):
+  """Shortcut to wrap `nnx.bridge.ToLinen` and return its instance."""
+
+  class WrappedModule(linen.Module):
+    """
+    A wrapper module for converting a NNX class to a Linen-compatible Flax module.
+
+    Attributes:
+        config (Any): Configuration object used by the module.
+        mesh (Any): Mesh information for parallelism or device mapping.
+        name (str): Name of the module instance.
+        quant (Any, optional): Quantization configuration, if used.
+        extra_kwargs (Optional[dict], optional): Additional keyword arguments to pass to the underlying `nnx_class`.
+    """
+    config: tp.Any
+    mesh: tp.Any
+    name: str
+    quant: tp.Any = None
+    extra_kwargs: tp.Optional[dict] = None
+
+    @linen.compact
+    def __call__(self, broadcast_in, c, *xs, **calltime_kwargs):
+      """
+      Applies the wrapped NNX module with the given inputs.
+
+      Args:
+          broadcast_in: Input tensor or structure used for broadcasting.
+          c: Context or auxiliary input required by the model.
+          *xs: Additional positional inputs to be passed to the wrapped module.
+          **calltime_kwargs: Additional keyword arguments passed at call time 
+                              (e.g., masks or optional flags like `bidirectional_mask`).
+
+      Returns:
+          Output from the underlying NNX module.
+      """
+      full_kwargs = FrozenDict({
+              **kwargs,
+              **(self.extra_kwargs or {}),
+          })
+      return ToLinen(nnx_class,
+                    args=args,
+                    kwargs=FrozenDict({
+                        'config': self.config,
+                        'mesh': self.mesh,
+                        'name': self.name,
+                        'quant': self.quant,
+                        **full_kwargs,
+                    }))(broadcast_in, c, *xs, **calltime_kwargs)
+  return WrappedModule
