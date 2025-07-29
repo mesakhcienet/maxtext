@@ -221,10 +221,10 @@ def gemma3_decoder_layer(
       name=name,
       metadata_fn=initializers.variable_to_logically_partitioned,
   )
-def gemma3_decoder_layer_class(name:str="mesa"):
+def gemma3_decoder_layer_class(custom_name_here:str="mesa"):
   return nnx_wrappers.to_linen_class(
     Gemma3DecoderLayer,
-    name=name,
+    custom_name_here=custom_name_here,
     metadata_fn=initializers.variable_to_logically_partitioned,
   )
 
