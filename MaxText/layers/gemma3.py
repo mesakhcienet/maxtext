@@ -63,12 +63,13 @@ def get_query_pre_attn_scalar(config) -> float:
 class Gemma3DecoderLayer(nnx.Module):
   """Transformer decoder layer that attends to the encoder."""
  
-  def __init__(self, config: Config, mesh: Mesh, quant: Optional[Quant] = None, attention_type: AttentionType = AttentionType.LOCAL_SLIDING):
+  def __init__(self, config: Config, mesh: Mesh, name: Optional[str]= None,quant: Optional[Quant] = None, attention_type: AttentionType = AttentionType.LOCAL_SLIDING):
     """Initializes the Gemma3DecoderLayer module."""
     self.config = config
     self.mesh = mesh
     self.quant = quant
     self.attention_type = attention_type
+    self.name = name
 
   def __call__(
       self,

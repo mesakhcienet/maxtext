@@ -521,13 +521,7 @@ def to_linen_class(nnx_class, *args, **kwargs):
     name: str
     quant: tp.Any = None
     extra_kwargs: tp.Optional[dict] = None
-
-
-    def __init__(self,*args,**kwargs):
-      super.__init__(*args,**kwargs)
-      print(f"{args=}")
-      print(f"{kwargs=}")
-
+  
     @linen.compact
     def __call__(self, broadcast_in, c, *xs, **calltime_kwargs):
       """
@@ -547,6 +541,7 @@ def to_linen_class(nnx_class, *args, **kwargs):
               **kwargs,
               **(self.extra_kwargs or {}),
           })
+      print(f"{full_kwargs=}")
       return ToLinen(nnx_class,
                     args=args,
                     kwargs=FrozenDict({
