@@ -345,7 +345,7 @@ class Decoder(nn.Module):
       case DecoderBlockType.GEMMA2:
         return [gemma2.Gemma2DecoderLayer]
       case DecoderBlockType.GEMMA3:
-        return [gemma3.Gemma3DecoderLayer]
+        return [gemma3.gemma3_decoder_layer_class()]
       case DecoderBlockType.GPT3:
         return [gpt3.Gpt3DecoderLayer]
       case DecoderBlockType.QWEN3:

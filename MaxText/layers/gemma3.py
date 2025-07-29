@@ -26,6 +26,7 @@ from flax import nnx
 
 from MaxText.common_types import Config
 from MaxText.layers import attentions
+from MaxText.layers import nnx_wrappers
 from MaxText.layers import quantizations
 from MaxText.layers.attentions import AttentionType, Attention
 from MaxText.layers.linears import mlp_block
@@ -220,6 +221,13 @@ def gemma3_decoder_layer(
       attention_type=attention_type,
       name=name,
       metadata_fn=initializers.variable_to_logically_partitioned,
+  )
+
+def gemma3_decoder_layer_class(
+):
+  return nnx_wrappers.to_linen_class(
+    Gemma3DecoderLayer,
+    metadata_fn=initializers.variable_to_logically_partitioned
   )
 
 
