@@ -32,9 +32,9 @@ from MaxText.layers.attentions import AttentionType, Attention
 from MaxText.layers.linears import mlp_block
 from MaxText.layers.linears import MlpBlock
 from MaxText.layers import initializers
-from MaxText.layers.normalizations import rms_norm
+from MaxText.layers.normalizations import RMSNorm,rms_norm
 from MaxText.layers.quantizations import AqtQuantization as Quant
-
+from MaxText import max_logging
 
 GEMMA3_ATTENTION_PATTERN = (
     attentions.AttentionType.LOCAL_SLIDING,
@@ -60,17 +60,37 @@ def get_query_pre_attn_scalar(config) -> float:
   else:
     raise ValueError(f"Unsupported model name: {config.model_name}")
 
+
+def set_attrs_from_kwargs(obj,
+                          kwargs,
+                          *,
+                          skip_if_exists: bool = True,
+                          warn_on_skip: bool = False):
+  for key, value in kwargs.items():
+    if skip_if_exists and hasattr(obj, key):
+      if warn_on_skip:
+        max_logging.log(
+            f"Skip overriding existing attribute {key} with value {value} in {obj.__class__.__name__}"
+        )
+      continue
+    setattr(obj, key, value)
+
+
 # Gemma3 Decoder Layer
 class Gemma3DecoderLayer(nnx.Module):
   """Transformer decoder layer that attends to the encoder."""
  
-  def __init__(self, config: Config, mesh: Mesh, quant: Optional[Quant] = None, attention_type: AttentionType = AttentionType.LOCAL_SLIDING):
+  def __init__(self,*,
+              config: Config, mesh: Mesh, quant: Optional[Quant] = None, 
+              attention_type: AttentionType = AttentionType.LOCAL_SLIDING,
+              **kwargs):
     """Initializes the Gemma3DecoderLayer module."""
     self.config = config
     self.mesh = mesh
     self.quant = quant
     self.attention_type = attention_type
-
+    set_attrs_from_kwargs(self, kwargs, skip_if_exists=True, warn_on_skip=True)
+    
   def __call__(
       self,
       inputs,
@@ -89,7 +109,7 @@ class Gemma3DecoderLayer(nnx.Module):
     inputs = nn.with_logical_constraint(inputs, ("activation_batch", "activation_norm_length", "activation_embed"))
     inputs = checkpoint_name(inputs, "decoder_layer_input")
     # inputs: embedded inputs to the decoder with shape [batch, length, emb_dim]
-    lnx = rms_norm(
+    lnx = RMSNorm(
         num_features=num_features,
         dtype=cfg.dtype,
         weight_dtype=cfg.weight_dtype,
@@ -135,7 +155,7 @@ class Gemma3DecoderLayer(nnx.Module):
         bidirectional_mask=bidirectional_mask,
     )
     if cfg.use_post_attn_norm:
-      attention_lnx = rms_norm(
+      attention_lnx = RMSNorm(
           num_features=attention_lnx.shape[-1],
           dtype=cfg.dtype,
           weight_dtype=cfg.weight_dtype,
@@ -149,7 +169,7 @@ class Gemma3DecoderLayer(nnx.Module):
     attention_lnx += inputs
     residual = attention_lnx
 
-    attn_output = rms_norm(
+    attn_output = RMSNorm(
         num_features=attention_lnx.shape[-1],
         dtype=cfg.dtype,
         weight_dtype=cfg.weight_dtype,
@@ -171,7 +191,7 @@ class Gemma3DecoderLayer(nnx.Module):
     )(attn_output, deterministic=deterministic)
 
     if cfg.use_post_ffw_norm:
-      mlp_lnx = rms_norm(
+      mlp_lnx = RMSNorm(
           num_features=mlp_lnx.shape[-1],
           dtype=cfg.dtype,
           weight_dtype=cfg.weight_dtype,

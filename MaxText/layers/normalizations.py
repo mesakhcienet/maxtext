@@ -39,7 +39,8 @@ class RMSNorm(nnx.Module):
       scale_init: Initializer = nn.initializers.ones,
       parameter_memory_host_offload: bool = False,
       *,
-      rngs: nnx.Rngs,
+      name: Optional[str] = None,
+      rngs: nnx.Rngs|None = None,
   ):
     self.num_features = num_features
     self.epsilon = epsilon
@@ -47,9 +48,11 @@ class RMSNorm(nnx.Module):
     self.weight_dtype = weight_dtype
     self.kernel_axes = kernel_axes
     self.scale_init = scale_init
-    self.parameter_memory_host_offload = parameter_memory_host_offload
+    self.parameter_memory_host_offload = parameter_memory_host_offload,
+    self.rngs = rngs if rngs is not None else nnx.Rngs(0)
+    self.name = name
     self.scale = nnx.Param(
-        scale_init(rngs.params(), (num_features,), weight_dtype),
+        scale_init(self.rngs.params(), (num_features,), weight_dtype),
         sharding=kernel_axes,
     )
 
