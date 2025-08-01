@@ -33,6 +33,7 @@ from MaxText.inference import page_manager
 from MaxText.layers import linears
 from MaxText.layers import quantizations
 from MaxText.layers import pipeline
+from MaxText.layers import nnx_wrappers
 from MaxText import maxtext_utils
 from MaxText import multimodal_utils
 from MaxText.layers.attentions import Attention
@@ -351,9 +352,9 @@ class Decoder(nn.Module):
       case DecoderBlockType.QWEN3:
         return [qwen3.Qwen3DecoderLayer]
       case DecoderBlockType.SIMPLE:
-        return [simple_layer.simple_decoder_layer_class()]
+        return [lambda *args, **kwargs: nnx_wrappers.to_linen(simple_layer.SimpleDecoderLayer, *args, **kwargs)]
       case DecoderBlockType.SIMPLE_MLP:
-        return [simple_layer.simple_mlp_decoder_layer_class()]
+        return [lambda *args, **kwargs: nnx_wrappers.to_linen(simple_layer.SimpleMlpDecoderLayer, *args, **kwargs)]
       case DecoderBlockType.LLAMA4:
         return [llama4.Llama4ScannableBlock] if self.config.scan_layers else [llama4.Llama4DecoderLayer]
       case _:
