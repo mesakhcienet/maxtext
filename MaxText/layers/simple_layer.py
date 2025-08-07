@@ -59,7 +59,7 @@ class SimpleDecoderLayer(nnx.Module):
 
     self.weight_mat = nnx.Param(init_fn(self.rngs.params(), (self.config.emb_dim, self.config.emb_dim), self.weight_dtype), )
 
-    set_attrs_from_kwargs(self, kwargs, skip_if_exists=True, warn_on_skip=True)
+    # set_attrs_from_kwargs(self, kwargs, skip_if_exists=True, warn_on_skip=True)
 
   def __call__(
       self, inputs: jnp.ndarray, positions, segmentation, deterministic, model_mode, previous_chunk=None, page_state=None
@@ -125,7 +125,7 @@ class SimpleMlpDecoderLayer(nnx.Module):
 
     self.ff_2 = nnx.Param(init_ff2_fn(self.rngs.params(), (self.config.mlp_dim, self.config.emb_dim), self.weight_dtype), )
 
-    set_attrs_from_kwargs(self, kwargs, skip_if_exists=True, warn_on_skip=True)
+    # set_attrs_from_kwargs(self, kwargs, skip_if_exists=True, warn_on_skip=True)
 
   def __call__(
       self,
