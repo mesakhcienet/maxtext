@@ -26,16 +26,6 @@ from MaxText import max_logging
 from typing import Any, Optional
 # pytype: disable=attribute-error
 
-
-def set_attrs_from_kwargs(obj, kwargs, *, skip_if_exists: bool = True, warn_on_skip: bool = False):
-  for key, value in kwargs.items():
-    if skip_if_exists and hasattr(obj, key):
-      if warn_on_skip:
-        max_logging.log(f"Skip overriding existing attribute {key} with value {value} in {obj.__class__.__name__}")
-      continue
-    setattr(obj, key, value)
-
-
 class SimpleDecoderLayer(nnx.Module):
   """Decoder layer consisting of a single [embed, embed] weight matrix."""
 
