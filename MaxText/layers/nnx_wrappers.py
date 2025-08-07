@@ -535,34 +535,25 @@ def get_reserved_linen_fields() -> set[str]:
 
 def to_linen_class(
     nnx_class: type[M],
-    *args: tp.Any,
-    metadata_fn: tp.Callable[[variablelib.VariableState], tp.Any] | None = None,
-    **static_kwargs: tp.Any,
-) -> type[linen.Module]:
+    metadata_fn: (
+      tp.Callable[[variablelib.VariableState], tp.Any] | None
+    ) = to_linen_var,
+    name: str | None = None,
+    skip_rng: bool = False,
+    to_linen_base_type: type[ToLinen] = ToLinen,
+    **partial_kwargs: tp.Any,
+) -> type[ToLinen]:
   """Dynamically wraps an NNX module class into a Flax Linen module class."""
-
-  constructor_fields = extract_constructor_fields(nnx_class)
-  dataclass_fields = []
-  reserved_fields = get_reserved_linen_fields()
-
-  for name, (annotation, default) in constructor_fields.items():
-    if name in static_kwargs or name in reserved_fields:
-      continue  # static kwarg overrides field
-    if default is dataclasses.MISSING:
-      dataclass_fields.append((name, annotation))
-    else:
-      dataclass_fields.append((name, annotation, dataclasses.field(default=default)))
-
-  dataclass_fields.append(("extra_kwargs", tp.Optional[dict], dataclasses.field(default=None)))
-
-  WrappedModule = dataclasses.make_dataclass(
-      cls_name=f"Wrapped{nnx_class.__name__}",
-      fields=dataclass_fields,
-      bases=(linen.Module, ),
-      namespace={
-          "__call__": _make_call_method(nnx_class, args, static_kwargs, metadata_fn),
-      },
-      frozen=False
-  )
-
-  return WrappedModule
+  class ToLinenPartial(ToLinen):
+    def __init__(self, *args, **kwargs):
+      print("ToLinenPartial:",args,kwargs)
+      print(kwargs)
+      super().__init__(
+        nnx_class,
+        args=args,
+        kwargs=FrozenDict({**partial_kwargs, **kwargs}),
+        metadata_fn=metadata_fn,
+        skip_rng=skip_rng,
+        name=name,
+      )
+  return ToLinenPartial
